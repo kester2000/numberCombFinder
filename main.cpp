@@ -381,15 +381,15 @@ void randomFind()
 {
     while (1) {
         string seed = to_string(rand());
-        cout << "try seed: " << seed << " ";
+        // cout << "try seed: " << seed << " ";
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
         int wildCnt = wild(cardList);
-        cout << "wildCnt: " << wildCnt << " ";
+        // cout << "wildCnt: " << wildCnt << " ";
         if (wildCnt == 2) {
             tot -= 6;
         }
-        cout << "tot: " << tot << endl;
+        // cout << "tot: " << tot << endl;
         if (maxRecorder.smallerThan(tot)) {
             getLines(seed, cardList);
         }
@@ -408,16 +408,17 @@ int getNextNum()
 void numberFind()
 {
     while (1) {
-        string seed = to_string(getNextNum());
-        cout << "try seed: " << seed << " ";
+        int num = getNextNum();
+        string seed = to_string(num);
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
         int wildCnt = wild(cardList);
-        cout << "wildCnt: " << wildCnt << " ";
         if (wildCnt == 2) {
             tot -= 6;
         }
-        cout << "tot: " << tot << endl;
+        // if (num % 1000 == 0) {
+        cout << "try seed: " << seed << endl;
+        // }
         if (maxRecorder.smallerThan(tot)) {
             getLines(seed, cardList);
         }
