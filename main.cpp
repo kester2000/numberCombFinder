@@ -18,15 +18,11 @@
 
 using namespace std;
 
-string seed;
-int threadCount = 12;
+// string seed;
+int calThread = 12;
 int zeroCount = 2;
 int SIZE = 20;
 const char* outputFile = NULL;
-
-vector<Card> cardList;
-
-bool cmp(int i, int j) { return cardList[i] < cardList[j]; }
 
 vector<Card> getCardsBySeed(string seedName)
 {
@@ -76,7 +72,7 @@ bool combineNext(int* choice, int n, int m)
     return false;
 }
 
-vector<int> reverseVec(vector<int> v)
+vector<int> reverseVec(vector<int>& v)
 {
     vector<int> r;
     r.resize(15);
@@ -92,7 +88,7 @@ public:
         return MX < val;
     }
 
-    void set(int val, vector<int> vec)
+    void set(string seed, int val, vector<int> vec)
     {
         lock_guard<shared_mutex> _tmp(mMutex);
         if (MX < val) {
@@ -136,7 +132,7 @@ private:
     string mSeed = "";
 } maxRecorder;
 
-int getScore(vector<int>& perm)
+int getScore(string& seed, vector<Card>& cardList, vector<int>& perm)
 {
     Comb comb;
     for (int i = 0; i < SIZE; i++) {
@@ -144,13 +140,13 @@ int getScore(vector<int>& perm)
     }
     int r = comb.getScore();
     if (maxRecorder.smallerThan(r)) {
-        maxRecorder.set(r, perm);
+        maxRecorder.set(seed, r, perm);
         maxRecorder.print();
     }
     return r;
 }
 
-int getPossibleScore(vector<int>& lines)
+int getPossibleScore(vector<Card>& cardList, vector<int>& lines)
 {
     int r = 0;
     for (int i = 0; i < 5; i++) {
@@ -160,9 +156,9 @@ int getPossibleScore(vector<int>& lines)
     return r;
 }
 
-vector<int> findPieces(int x)
+vector<int> findPieces(vector<Card>& cardList, int x)
 {
-    vector<int> r;
+    vector<pair<int, int> > pairVec;
     for (int i = 0; i < cardList.size(); i++) {
         int y = x;
         bool flag = true;
@@ -177,15 +173,19 @@ vector<int> findPieces(int x)
             }
         }
         if (flag) {
-            r.push_back(i);
+            pairVec.push_back({cardList[i].getScore(), i});
         }
+    }
+    sort(pairVec.begin(), pairVec.end());
+    vector<int> r;
+    for (auto it : pairVec) {
+        r.push_back(it.second);
     }
     return r;
 }
 
-bool place(vector<int>& perm, vector<int> cardId, vector<int> places)
+bool place(vector<Card>& cardList, vector<int>& perm, vector<int> cardId, vector<int> places)
 {
-    sort(cardId.begin(), cardId.end(), cmp);
     int i, j;
     for (i = 0, j = 0; i < cardId.size() && j < places.size(); i++) {
         if (perm[cardId[i]] == -1) {
@@ -196,7 +196,7 @@ bool place(vector<int>& perm, vector<int> cardId, vector<int> places)
     return j >= places.size();
 }
 
-void placeRest(vector<int>& perm)
+void placeRest(vector<Card>& cardList, vector<int>& perm)
 {
     int id = -1, mx = -1;
     bool flag[20];
@@ -226,9 +226,9 @@ void placeRest(vector<int>& perm)
     }
 }
 
-int realGetPerm(vector<int>& lines)
+int realGetPerm(string& seed, vector<Card>& cardList, vector<int>& lines)
 {
-    if (getPossibleScore(lines) < maxRecorder.getMax()) {
+    if (getPossibleScore(cardList, lines) < maxRecorder.getMax()) {
         return 0;
     }
 
@@ -255,32 +255,32 @@ int realGetPerm(vector<int>& lines)
     auto t = mp.end();
     do {
         t--;
-        if (!place(perm, findPieces(t->first), t->second)) {
+        if (!place(cardList, perm, findPieces(cardList, t->first), t->second)) {
             return 2;
         }
     } while (t != mp.begin());
 
-    placeRest(perm);
-    getScore(perm);
+    placeRest(cardList, perm);
+    getScore(seed, cardList, perm);
     return 1;
 }
 
-void getPerm(vector<int>& lines, int dep)
+void getPerm(string& seed, vector<Card>& cardList, vector<int>& lines, int dep)
 {
     if (dep > zeroCount) {
         return;
     }
-    int b = realGetPerm(lines);
+    int b = realGetPerm(seed, cardList, lines);
     if (b == 2) {
         for (int i = 0; i < lines.size() && lines[i]; i++) {
             vector<int> cp = lines;
             cp[i] = 0;
-            getPerm(cp, dep + 1);
+            getPerm(seed, cardList, cp, dep + 1);
         }
     }
 }
 
-vector<vector<int> > realGetLines(vector<vector<int> > lines, int* choice, int dep)
+vector<vector<int> > realGetLines(vector<Card>& cardList, vector<vector<int> > lines, int* choice, int dep)
 {
     if (dep >= 3) return lines;
     const int nums[3][3] = {{8, 4, 3}, {9, 5, 1}, {7, 6, 2}};
@@ -303,13 +303,13 @@ vector<vector<int> > realGetLines(vector<vector<int> > lines, int* choice, int d
             }
         }
     }
-    return realGetLines(lines, choice, dep + 1);
+    return realGetLines(cardList, lines, choice, dep + 1);
 }
 
 mutex idMutex;
 vector<vector<int> > strategyVec;
 
-static int strategyId = 0;
+int strategyId = 0;
 int getNextId()
 {
     lock_guard<mutex> _tmp(idMutex);
@@ -318,22 +318,22 @@ int getNextId()
     return ret;
 }
 
-void runThread()
+void runThread(string& seed, vector<Card>& cardList)
 {
     int id = getNextId();
     while (id != -1) {
-        getPerm(strategyVec[id], 0);
+        getPerm(seed, cardList, strategyVec[id], 0);
         id = getNextId();
     }
 }
 
-void getLines()
+void getLines(string& seed, vector<Card>& cardList)
 {
     int choice[] = {0, 1, 2, 3, 4};
     set<vector<int> > strategySet;
     strategySet.clear();
     do {
-        vector<vector<int> > strategyTmp = realGetLines({{}}, choice, 0);
+        vector<vector<int> > strategyTmp = realGetLines(cardList, {{}}, choice, 0);
         for (auto strategy : strategyTmp) {
             if (strategySet.find(reverseVec(strategy)) == strategySet.end()) {
                 strategySet.insert(strategy);
@@ -343,16 +343,16 @@ void getLines()
     strategyVec = vector<vector<int> >(strategySet.begin(), strategySet.end());
     cout << strategyVec.size() << endl;
     vector<thread> threads;
-    threads.resize(threadCount);
-    for (int i = 0; i < threadCount; i++) {
-        threads[i] = move(thread(runThread));
+    threads.resize(calThread);
+    for (int i = 0; i < calThread; i++) {
+        threads[i] = move(thread(runThread, ref(seed), ref(cardList)));
     }
-    for (int i = 0; i < threadCount; i++) {
+    for (int i = 0; i < calThread; i++) {
         threads[i].join();
     }
 }
 
-int sum(vector<Card> cards)
+int sum(vector<Card>& cards)
 {
     int ret = 0;
     for (Card& c : cards) {
@@ -363,7 +363,7 @@ int sum(vector<Card> cards)
     return ret;
 }
 
-int wild(vector<Card> cards)
+int wild(vector<Card>& cards)
 {
     int ret = 0;
     for (Card& c : cards) {
@@ -372,6 +372,56 @@ int wild(vector<Card> cards)
         }
     }
     return ret;
+}
+
+void randomFind()
+{
+    while (1) {
+        string seed = to_string(rand());
+        cout << "try seed: " << seed << " ";
+        vector<Card> cardList = getCardsBySeed(seed);
+        int tot = sum(cardList);
+        int wildCnt = wild(cardList);
+        cout << "wildCnt: " << wildCnt << " ";
+        if (wildCnt == 2) {
+            tot -= 6;
+        }
+        cout << "tot: " << tot << endl;
+        if (maxRecorder.smallerThan(tot)) {
+            strategyId = 0;
+            getLines(seed, cardList);
+        }
+        // maxRecorder.print();
+    }
+}
+
+mutex startNumMutex;
+int startNum = 0;
+int getNextNum()
+{
+    lock_guard<mutex> _tmp(startNumMutex);
+    return startNum++;
+}
+
+void numberFind()
+{
+    while (1) {
+        string seed = to_string(getNextNum());
+        cout << "try seed: " << seed << " ";
+        vector<Card> cardList = getCardsBySeed(seed);
+        int tot = sum(cardList);
+        int wildCnt = wild(cardList);
+        cout << "wildCnt: " << wildCnt << " ";
+        if (wildCnt == 2) {
+            tot -= 6;
+        }
+        cout << "tot: " << tot << endl;
+        if (maxRecorder.smallerThan(tot)) {
+            strategyId = 0;
+            getLines(seed, cardList);
+        }
+        // maxRecorder.print();
+    }
 }
 
 void usage(int argc, char** argv)
@@ -383,9 +433,10 @@ void usage(int argc, char** argv)
         "\t-r           randomly set seed and find max score.\n"
         "\t-S <start>   find the max score starts at <start>\n"
         "The following option is optional\n"
-        "\t-z <zero>    the number of lines allow get zero score.   default: 2\n"
-        "\t-t <thread>  the number of threads.                      default: 12\n"
         "\t-p <pre>     only print the score bigger than pre.       default: 0\n"
+        "\t-z <zero>    the number of lines allow get zero score.   default: 2\n"
+        "\t-f <find>    the number of threads to find seed.\n"
+        "\t-c <cal>     the number of threads to calculate the score.\n"
         "\t-o <file>    print to the file if find a bigger score.\n");
     printf("\n");
 }
@@ -397,9 +448,11 @@ int main(int argc, char** argv)
         return 0;
     }
     char c;
-    int mode = 0, startNum, preMax = 0;
+    string seed = "";
+    int mode = 0, preMax = 0, findThread = 0;
+    calThread = 0;
     do {
-        c = getopt(argc, argv, "s:rS:z:t:p:o:h");
+        c = getopt(argc, argv, "s:rS:p:z:t:o:h");
         if (c == EOF) break;
         switch (c) {
             case 's':
@@ -425,14 +478,17 @@ int main(int argc, char** argv)
                 mode = 3;
                 startNum = atoi(optarg);
                 break;
+            case 'p':
+                preMax = atoi(optarg);
+                break;
             case 'z':
                 zeroCount = atoi(optarg);
                 break;
-            case 't':
-                threadCount = atoi(optarg);
+            case 'f':
+                findThread = atoi(optarg);
                 break;
-            case 'p':
-                preMax = atoi(optarg);
+            case 'c':
+                calThread = atoi(optarg);
                 break;
             case 'o':
                 outputFile = optarg;
@@ -448,49 +504,41 @@ int main(int argc, char** argv)
     }
     maxRecorder.preSetMX(preMax);
     if (mode == 1) {
-        cardList = getCardsBySeed(seed);
+        if (!calThread) {
+            calThread = 12;
+        }
+        vector<Card> cardList = getCardsBySeed(seed);
         cout << cardList.size() << endl;
         for (Card card : cardList) {
             cout << card.getNum(0) << ' ' << card.getNum(1) << ' ' << card.getNum(2) << endl;
         }
         strategyId = 0;
-        getLines();
-    } else if (mode == 2) {
-        srand(time(0));
-        while (1) {
-            seed = to_string(rand());
-            cout << "try seed: " << seed << " ";
-            cardList = getCardsBySeed(seed);
-            int tot = sum(cardList);
-            int wildCnt = wild(cardList);
-            cout << "wildCnt: " << wildCnt << " ";
-            if (wildCnt == 2) {
-                tot -= 6;
-            }
-            cout << "tot: " << tot << endl;
-            if (maxRecorder.smallerThan(tot)) {
-                strategyId = 0;
-                getLines();
-            }
-            maxRecorder.print();
+        getLines(seed, cardList);
+    } else {
+        if (!calThread) {
+            calThread = 1;
         }
-    } else if (mode == 3) {
-        while (1) {
-            seed = to_string(startNum++);
-            cout << "try seed: " << seed << " ";
-            cardList = getCardsBySeed(seed);
-            int tot = sum(cardList);
-            int wildCnt = wild(cardList);
-            cout << "wildCnt: " << wildCnt << " ";
-            if (wildCnt == 2) {
-                tot -= 6;
+        if (!findThread) {
+            findThread = 12;
+        }
+        vector<thread> threads;
+        threads.resize(findThread);
+
+        if (mode == 2) {
+            srand(time(0));
+            for (int i = 0; i < findThread; i++) {
+                threads[i] = move(thread(randomFind));
             }
-            cout << "tot: " << tot << endl;
-            if (maxRecorder.smallerThan(tot)) {
-                strategyId = 0;
-                getLines();
+            for (int i = 0; i < findThread; i++) {
+                threads[i].join();
             }
-            maxRecorder.print();
+        } else if (mode == 3) {
+            for (int i = 0; i < findThread; i++) {
+                threads[i] = move(thread(numberFind));
+            }
+            for (int i = 0; i < findThread; i++) {
+                threads[i].join();
+            }
         }
     }
 }
