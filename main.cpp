@@ -412,6 +412,7 @@ void randomFind()
     }
 }
 
+int printNum;
 typedef long long ll;
 mutex startNumMutex;
 ll startNum = 0;
@@ -432,9 +433,9 @@ void numberFind()
         if (wildCnt == 2) {
             tot -= 6;
         }
-        // if (num % 1000 == 0) {
-        cout << "try seed: " << seed << endl;
-        // }
+        if (num % printNum == 0) {
+            cout << "try seed: " << seed << endl;
+        }
         if (maxRecorder.smallerThan(tot)) {
             getLines(seed, cardList);
         }
@@ -455,7 +456,9 @@ void usage(int argc, char** argv)
         "\t-z <zero>    the number of lines allow get zero score.   default: 2\n"
         "\t-f <find>    the number of threads to find seed.\n"
         "\t-c <cal>     the number of threads to calculate the score.\n"
-        "\t-o <file>    print to the file if find a bigger score.\n");
+        "\t-o <file>    print to the file if find a bigger score.\n"
+        "\t-m <number>  print when mod l equals 0.\n"
+        "\t-h           return this text.\n");
     printf("\n");
 }
 
@@ -468,9 +471,10 @@ int main(int argc, char** argv)
     char c;
     string seed = "";
     int mode = 0, preMax = 0, findThread = 0;
+    printNum = 1;
     calThread = 0;
     do {
-        c = getopt(argc, argv, "s:rS:p:z:t:o:h");
+        c = getopt(argc, argv, "s:rS:p:z:t:o:m:h");
         if (c == EOF) break;
         switch (c) {
             case 's':
@@ -510,6 +514,9 @@ int main(int argc, char** argv)
                 break;
             case 'o':
                 outputFile = optarg;
+                break;
+            case 'm':
+                printNum = atoi(optarg);
                 break;
             case 'h':
                 usage(argc, argv);
