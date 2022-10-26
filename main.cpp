@@ -265,10 +265,13 @@ int realGetPerm(string& seed, vector<Card>& cardList, vector<int>& lines)
     return 1;
 }
 
-void getPerm(string& seed, vector<Card>& cardList, vector<int>& lines, int dep)
+bool getPerm(string& seed, vector<Card>& cardList, vector<int> lines, int dep)
 {
+    if (lines.empty()) {
+        return false;
+    }
     if (dep > zeroCount) {
-        return;
+        return true;
     }
     int b = realGetPerm(seed, cardList, lines);
     if (b == 2) {
@@ -278,6 +281,7 @@ void getPerm(string& seed, vector<Card>& cardList, vector<int>& lines, int dep)
             getPerm(seed, cardList, cp, dep + 1);
         }
     }
+    return true;
 }
 
 vector<vector<int> > realGetLines(vector<Card>& cardList, vector<vector<int> > lines, int* choice, int dep)
@@ -305,47 +309,46 @@ vector<vector<int> > realGetLines(vector<Card>& cardList, vector<vector<int> > l
     }
     return realGetLines(cardList, lines, choice, dep + 1);
 }
-
-mutex idMutex;
-vector<vector<int> > strategyVec;
-
-int strategyId = 0;
-int getNextId()
-{
-    lock_guard<mutex> _tmp(idMutex);
-    int ret;
-    ret = (strategyId < strategyVec.size()) ? (strategyId++) : -1;
-    return ret;
-}
-
-void runThread(string& seed, vector<Card>& cardList)
-{
-    int id = getNextId();
-    while (id != -1) {
-        getPerm(seed, cardList, strategyVec[id], 0);
-        id = getNextId();
+class LinesVec {
+public:
+    vector<int> getNext()
+    {
+        lock_guard<mutex> _tmp(idMutex);
+        return vec[mId++];
     }
+    void set(set<vector<int> > lineSet) { vec = vector<vector<int> >(lineSet.begin(), lineSet.end()); }
+
+private:
+    mutex idMutex;
+    int mId = 0;
+    vector<vector<int> > vec;
+};
+
+void runThread(string& seed, vector<Card>& cardList, LinesVec& linesVec)
+{
+    while (getPerm(seed, cardList, linesVec.getNext(), 0))
+        ;
 }
 
 void getLines(string& seed, vector<Card>& cardList)
 {
     int choice[] = {0, 1, 2, 3, 4};
-    set<vector<int> > strategySet;
-    strategySet.clear();
+    set<vector<int> > linesSet;
+    linesSet.clear();
     do {
-        vector<vector<int> > strategyTmp = realGetLines(cardList, {{}}, choice, 0);
-        for (auto strategy : strategyTmp) {
-            if (strategySet.find(reverseVec(strategy)) == strategySet.end()) {
-                strategySet.insert(strategy);
+        vector<vector<int> > linesTmp = realGetLines(cardList, {{}}, choice, 0);
+        for (auto strategy : linesTmp) {
+            if (linesSet.find(reverseVec(strategy)) == linesSet.end()) {
+                linesSet.insert(strategy);
             }
         }
     } while (combineNext(choice, SIZE, 5));
-    strategyVec = vector<vector<int> >(strategySet.begin(), strategySet.end());
-    cout << strategyVec.size() << endl;
+    LinesVec linesVec;
+    linesVec.set(linesSet);
     vector<thread> threads;
     threads.resize(calThread);
     for (int i = 0; i < calThread; i++) {
-        threads[i] = move(thread(runThread, ref(seed), ref(cardList)));
+        threads[i] = move(thread(runThread, ref(seed), ref(cardList), ref(linesVec)));
     }
     for (int i = 0; i < calThread; i++) {
         threads[i].join();
@@ -388,7 +391,6 @@ void randomFind()
         }
         cout << "tot: " << tot << endl;
         if (maxRecorder.smallerThan(tot)) {
-            strategyId = 0;
             getLines(seed, cardList);
         }
         // maxRecorder.print();
@@ -417,7 +419,6 @@ void numberFind()
         }
         cout << "tot: " << tot << endl;
         if (maxRecorder.smallerThan(tot)) {
-            strategyId = 0;
             getLines(seed, cardList);
         }
         // maxRecorder.print();
@@ -512,7 +513,6 @@ int main(int argc, char** argv)
         for (Card card : cardList) {
             cout << card.getNum(0) << ' ' << card.getNum(1) << ' ' << card.getNum(2) << endl;
         }
-        strategyId = 0;
         getLines(seed, cardList);
     } else {
         if (!calThread) {
