@@ -95,17 +95,19 @@ public:
     void set(int val, vector<int> vec)
     {
         lock_guard<shared_mutex> _tmp(mMutex);
-        mSeed = seed;
-        MX = val;
-        best = vec;
-        if (outputFile) {
-            FILE* file = fopen(outputFile, "a");
-            fprintf(file, "seed: %s %d [", seed.c_str(), MX);
-            for (int i = 0; i < best.size(); i++) {
-                fprintf(file, "%d%c", best[i], ((i == best.size() - 1) ? ']' : ','));
+        if (MX < val) {
+            mSeed = seed;
+            MX = val;
+            best = vec;
+            if (outputFile) {
+                FILE* file = fopen(outputFile, "a");
+                fprintf(file, "seed: %s %d [", seed.c_str(), MX);
+                for (int i = 0; i < best.size(); i++) {
+                    fprintf(file, "%d%c", best[i], ((i == best.size() - 1) ? ']' : ','));
+                }
+                fprintf(file, "\n");
+                fclose(file);
             }
-            fprintf(file, "\n");
-            fclose(file);
         }
     }
 
