@@ -82,14 +82,10 @@ vector<int> reverseVec(vector<int>& v)
 
 class MaxRecorder {
 public:
-    bool smallerThan(int val)
-    {
-        shared_lock<shared_mutex> _tmp(mMutex);
-        return MX < val;
-    }
-
     void set(string seed, int val, vector<int> vec)
     {
+        writing = true;
+        unique_lock<mutex> _write(writeMutex);
         unique_lock<shared_mutex> _tmp(mMutex);
         if (MX < val) {
             mSeed = seed;
@@ -105,10 +101,23 @@ public:
                 fclose(file);
             }
         }
+        writing = false;
+    }
+
+    bool smallerThan(int val)
+    {
+        if (writing) {
+            unique_lock<mutex> _write(writeMutex);
+        }
+        shared_lock<shared_mutex> _tmp(mMutex);
+        return MX < val;
     }
 
     void print()
     {
+        if (writing) {
+            unique_lock<mutex> _write(writeMutex);
+        }
         shared_lock<shared_mutex> _tmp(mMutex);
         cout << "seed: " << mSeed << " ";
         cout << MX << " [";
@@ -120,16 +129,21 @@ public:
 
     int getMax()
     {
+        if (writing) {
+            unique_lock<mutex> _write(writeMutex);
+        }
         shared_lock<shared_mutex> _tmp(mMutex);
         return MX;
     }
     void preSetMX(int val) { MX = val; }
 
 private:
+    string mSeed = "";
     int MX = 0;
     vector<int> best;
+    bool writing = false;
+    mutex writeMutex;
     shared_mutex mMutex;
-    string mSeed = "";
 } maxRecorder;
 
 int getScore(string& seed, vector<Card>& cardList, vector<int>& perm)
@@ -398,9 +412,10 @@ void randomFind()
     }
 }
 
+typedef long long ll;
 mutex startNumMutex;
-int startNum = 0;
-int getNextNum()
+ll startNum = 0;
+ll getNextNum()
 {
     lock_guard<mutex> _tmp(startNumMutex);
     return startNum++;
@@ -409,7 +424,7 @@ int getNextNum()
 void numberFind()
 {
     while (1) {
-        int num = getNextNum();
+        ll num = getNextNum();
         string seed = to_string(num);
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
