@@ -90,7 +90,7 @@ public:
 
     void set(string seed, int val, vector<int> vec)
     {
-        lock_guard<shared_mutex> _tmp(mMutex);
+        unique_lock<shared_mutex> _tmp(mMutex);
         if (MX < val) {
             mSeed = seed;
             MX = val;
@@ -314,9 +314,10 @@ public:
     vector<int> getNext()
     {
         lock_guard<mutex> _tmp(idMutex);
-        return vec[mId++];
+        if (mId < vec.size()) return vec[mId++];
+        return {};
     }
-    void set(set<vector<int> > lineSet) { vec = vector<vector<int> >(lineSet.begin(), lineSet.end()); }
+    void set(set<vector<int> >& lineSet) { vec = vector<vector<int> >(lineSet.begin(), lineSet.end()); }
 
 private:
     mutex idMutex;
