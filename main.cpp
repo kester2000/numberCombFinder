@@ -498,7 +498,7 @@ int main(int argc, char** argv)
                     return 0;
                 }
                 mode = 3;
-                startNum = atoi(optarg);
+                startNum = strtoull(optarg, NULL, 0);
                 break;
             case 'p':
                 preMax = atoi(optarg);
