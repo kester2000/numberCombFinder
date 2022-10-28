@@ -1,3 +1,4 @@
+#include <time.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -23,6 +24,7 @@ int calThread = 12;
 int zeroCount = 2;
 int SIZE = 20;
 const char* outputFile = NULL;
+bool printTime = false;
 
 vector<Card> getCardsBySeed(string seedName)
 {
@@ -306,15 +308,17 @@ vector<vector<int> > realGetLines(vector<Card>& cardList, vector<vector<int> > l
     for (int i = 0; i < 5; i++) {
         int num = cardList[choice[index[dep][i]]].getNum(dep);
         if (num == -1) {
-            vector<vector<int> > new_strategys;
-            for (vector<int>& strategy : lines) {
-                for (int j = 0; j < 3; j++) {
-                    vector<int> new_strategy = strategy;
-                    new_strategy.push_back(nums[dep][j]);
-                    new_strategys.push_back(new_strategy);
+            int sz = lines.size();
+            for (int j = 0; j < 2; j++) {
+                for (int l = 0; l < sz; l++) {
+                    lines.push_back(lines[l]);
                 }
             }
-            lines = new_strategys;
+            for (int j = 0; j < 3; j++) {
+                for (int l = 0; l < sz; l++) {
+                    lines[j * sz + l].push_back(nums[dep][j]);
+                }
+            }
         } else {
             for (vector<int>& strategy : lines) {
                 strategy.push_back(num);
@@ -348,8 +352,8 @@ void runThread(string& seed, vector<Card>& cardList, LinesVec& linesVec)
 void getLines(string& seed, vector<Card>& cardList)
 {
     int choice[] = {0, 1, 2, 3, 4};
+    auto t0 = chrono::system_clock::now();
     set<vector<int> > linesSet;
-    linesSet.clear();
     do {
         vector<vector<int> > linesTmp = realGetLines(cardList, {{}}, choice, 0);
         for (auto strategy : linesTmp) {
@@ -358,6 +362,7 @@ void getLines(string& seed, vector<Card>& cardList)
             }
         }
     } while (combineNext(choice, SIZE, 5));
+    auto t1 = chrono::system_clock::now();
     LinesVec linesVec;
     linesVec.set(linesSet);
     vector<thread> threads;
@@ -368,17 +373,12 @@ void getLines(string& seed, vector<Card>& cardList)
     for (int i = 0; i < calThread; i++) {
         threads[i].join();
     }
-}
-
-int sum(vector<Card>& cards)
-{
-    int ret = 0;
-    for (Card& c : cards) {
-        for (int i = 0; i < 3; i++) {
-            ret += (c.getNum(i) == -1 ? 10 : c.getNum(i));
-        }
+    auto t2 = chrono::system_clock::now();
+    if (printTime) {
+        double duration1 = (t1 - t0).count() / (1e9);
+        double duration2 = (t2 - t1).count() / (1e9);
+        printf("t1 %lf seconds, t2 %lf seconds\n", duration1, duration2);
     }
-    return ret;
 }
 
 int wild(vector<Card>& cards)
@@ -392,23 +392,36 @@ int wild(vector<Card>& cards)
     return ret;
 }
 
+int sum(vector<Card>& cards)
+{
+    int ret = 0;
+    for (Card& c : cards) {
+        for (int i = 0; i < 3; i++) {
+            ret += (c.getNum(i) == -1 ? 10 : c.getNum(i));
+        }
+    }
+
+    int wildCnt = wild(cards);
+    if (wildCnt == 2) {
+        ret -= 6;
+    }
+    return ret;
+}
+
 void randomFind()
 {
     while (1) {
         string seed = to_string(rand());
-        // cout << "try seed: " << seed << " ";
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
         int wildCnt = wild(cardList);
-        // cout << "wildCnt: " << wildCnt << " ";
         if (wildCnt == 2) {
             tot -= 6;
         }
-        // cout << "tot: " << tot << endl;
         if (maxRecorder.smallerThan(tot)) {
             getLines(seed, cardList);
+            cout << "try seed: " << seed << "tot: " << tot << endl;
         }
-        // maxRecorder.print();
     }
 }
 
@@ -429,15 +442,11 @@ void numberFind()
         string seed = to_string(num);
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
-        int wildCnt = wild(cardList);
-        if (wildCnt == 2) {
-            tot -= 6;
-        }
-        if (num % printNum == 0) {
-            cout << "try seed: " << seed << endl;
-        }
         if (maxRecorder.smallerThan(tot)) {
             getLines(seed, cardList);
+            cout << "try seed: " << seed << "tot: " << tot << endl;
+        } else if (num % printNum == 0) {
+            cout << "try seed: " << seed << endl;
         }
         // maxRecorder.print();
     }
@@ -458,6 +467,7 @@ void usage(int argc, char** argv)
         "\t-c <cal>     the number of threads to calculate the score.\n"
         "\t-o <file>    print to the file if find a bigger score.\n"
         "\t-m <number>  print when mod l equals 0.\n"
+        "\t-t           print duration time.\n"
         "\t-h           return this text.\n");
     printf("\n");
 }
@@ -474,7 +484,7 @@ int main(int argc, char** argv)
     printNum = 1;
     calThread = 0;
     do {
-        c = getopt(argc, argv, "s:rS:p:z:t:o:m:h");
+        c = getopt(argc, argv, "s:rS:p:z:f:c:o:m:th");
         if (c == EOF) break;
         switch (c) {
             case 's':
@@ -517,6 +527,9 @@ int main(int argc, char** argv)
                 break;
             case 'm':
                 printNum = atoi(optarg);
+                break;
+            case 't':
+                printTime = true;
                 break;
             case 'h':
                 usage(argc, argv);
