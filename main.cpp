@@ -63,17 +63,6 @@ vector<Card> getCardsBySeed(string seedName)
     return ret;
 };
 
-bool combineNext(int* choice, int n, int m)
-{
-    for (int i = m - 1, nxt = 19; i >= 0; i--, nxt--)
-        if (choice[i] != nxt) {
-            choice[i]++;
-            for (int j = i + 1; j < m; j++) choice[j] = choice[j - 1] + 1;
-            return true;
-        }
-    return false;
-}
-
 vector<int> reverseVec(vector<int>& v)
 {
     vector<int> r;
@@ -249,9 +238,9 @@ int realGetPerm(string& seed, vector<Card>& cardList, vector<int>& lines)
     }
 
     map<int, vector<int> > mp;
-    const int index[][3] = {{-1, -1, -1}, {2, 0, 0}, {3, 0, 1}, {4, 0, 2}, {1, 1, 0}, {2, 1, 1}, {3, 1, 2},
-                            {4, 1, 3},    {0, 2, 0}, {1, 2, 1}, {2, 2, 2}, {3, 2, 3}, {4, 2, 4}, {0, 3, 1},
-                            {1, 3, 2},    {2, 3, 3}, {3, 3, 4}, {0, 4, 2}, {1, 4, 3}, {2, 4, 4}};
+    static const int index[][3] = {{-1, -1, -1}, {2, 0, 0}, {3, 0, 1}, {4, 0, 2}, {1, 1, 0}, {2, 1, 1}, {3, 1, 2},
+                                   {4, 1, 3},    {0, 2, 0}, {1, 2, 1}, {2, 2, 2}, {3, 2, 3}, {4, 2, 4}, {0, 3, 1},
+                                   {1, 3, 2},    {2, 3, 3}, {3, 3, 4}, {0, 4, 2}, {1, 4, 3}, {2, 4, 4}};
 
     for (int i = 1; i <= 19; i++) {
         int key = 0;
@@ -300,33 +289,6 @@ bool getPerm(string& seed, vector<Card>& cardList, vector<int> lines, int dep)
     return true;
 }
 
-vector<vector<int> > realGetLines(vector<Card>& cardList, vector<vector<int> > lines, int* choice, int dep)
-{
-    if (dep >= 3) return lines;
-    const int nums[3][3] = {{8, 4, 3}, {9, 5, 1}, {7, 6, 2}};
-    const int index[3][5] = {{3, 4, 0, 1, 2}, {0, 1, 2, 3, 4}, {0, 3, 1, 4, 2}};
-    for (int i = 0; i < 5; i++) {
-        int num = cardList[choice[index[dep][i]]].getNum(dep);
-        if (num == -1) {
-            int sz = lines.size();
-            for (int j = 0; j < 2; j++) {
-                for (int l = 0; l < sz; l++) {
-                    lines.push_back(lines[l]);
-                }
-            }
-            for (int j = 0; j < 3; j++) {
-                for (int l = 0; l < sz; l++) {
-                    lines[j * sz + l].push_back(nums[dep][j]);
-                }
-            }
-        } else {
-            for (vector<int>& strategy : lines) {
-                strategy.push_back(num);
-            }
-        }
-    }
-    return realGetLines(cardList, lines, choice, dep + 1);
-}
 class LinesVec {
 public:
     vector<int> getNext()
@@ -349,19 +311,56 @@ void runThread(string& seed, vector<Card>& cardList, LinesVec& linesVec)
         ;
 }
 
-void getLines(string& seed, vector<Card>& cardList)
+void insertSetByLine(set<vector<int> >& linesSet, vector<Card>& cardList, vector<int>& choice, vector<int>& line,
+                     int dep)
 {
-    int choice[] = {0, 1, 2, 3, 4};
-    auto t0 = chrono::system_clock::now();
-    set<vector<int> > linesSet;
-    do {
-        vector<vector<int> > linesTmp = realGetLines(cardList, {{}}, choice, 0);
-        for (auto strategy : linesTmp) {
-            if (linesSet.find(reverseVec(strategy)) == linesSet.end()) {
-                linesSet.insert(strategy);
-            }
+    static const int nums[3][3] = {{8, 4, 3}, {9, 5, 1}, {7, 6, 2}};
+    static const int index[5][3] = {{3, 0, 0}, {4, 1, 3}, {0, 2, 1}, {1, 3, 4}, {2, 4, 2}};
+    if (dep >= 15) {
+        if (linesSet.find(reverseVec(line)) == linesSet.end()) {
+            linesSet.insert(line);
         }
-    } while (combineNext(choice, SIZE, 5));
+        return;
+    }
+    int i = dep / 3, j = dep % 3;
+    int num = cardList[choice[i]].getNum(j);
+    if (num != -1) {
+        line[j * 5 + index[i][j]] = num;
+        insertSetByLine(linesSet, cardList, choice, line, dep + 1);
+    } else {
+        for (int l = 0; l < 3; l++) {
+            line[j * 5 + index[i][j]] = nums[j][l];
+            insertSetByLine(linesSet, cardList, choice, line, dep + 1);
+        }
+    }
+}
+
+void insertSet(set<vector<int> >& linesSet, vector<Card>& cardList, vector<int>& choice, int vis[20], int dep)
+{
+    if (dep >= 5) {
+        vector<int> line(15, -1);
+        insertSetByLine(linesSet, cardList, choice, line, 0);
+        return;
+    }
+    for (int i = 0; i < 20; i++) {
+        if (!vis[i]) {
+            vis[i] = 1;
+            choice.push_back(i);
+            insertSet(linesSet, cardList, choice, vis, dep + 1);
+            choice.pop_back();
+            vis[i] = 0;
+        }
+    }
+}
+
+void getMaxScore(string& seed, vector<Card>& cardList)
+{
+    auto t0 = chrono::system_clock::now();
+    int vis[20] = {0};
+    vector<int> choice;
+    set<vector<int> > linesSet;
+    insertSet(linesSet, cardList, choice, vis, 0);
+    cout << linesSet.size() << endl;
     auto t1 = chrono::system_clock::now();
     LinesVec linesVec;
     linesVec.set(linesSet);
@@ -419,7 +418,7 @@ void randomFind()
             tot -= 6;
         }
         if (maxRecorder.smallerThan(tot)) {
-            getLines(seed, cardList);
+            getMaxScore(seed, cardList);
             cout << "try seed: " << seed << "tot: " << tot << endl;
         }
     }
@@ -443,7 +442,7 @@ void numberFind()
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
         if (maxRecorder.smallerThan(tot)) {
-            getLines(seed, cardList);
+            getMaxScore(seed, cardList);
             cout << "try seed: " << seed << "tot: " << tot << endl;
         } else if (num % printNum == 0) {
             cout << "try seed: " << seed << endl;
@@ -550,7 +549,7 @@ int main(int argc, char** argv)
         for (Card card : cardList) {
             cout << card.getNum(0) << ' ' << card.getNum(1) << ' ' << card.getNum(2) << endl;
         }
-        getLines(seed, cardList);
+        getMaxScore(seed, cardList);
     } else {
         if (!calThread) {
             calThread = 1;
