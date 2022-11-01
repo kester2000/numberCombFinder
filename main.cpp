@@ -30,9 +30,9 @@ vector<Card> getCardsBySeed(string seedName)
 {
     vector<Card> ret;
     vector<Card> card;
-    const int x0[] = {3, 4, 8};
-    const int x1[] = {1, 5, 9};
-    const int x2[] = {2, 6, 7};
+    static const int x0[] = {3, 4, 8};
+    static const int x1[] = {1, 5, 9};
+    static const int x2[] = {2, 6, 7};
     for (int i0 : x0) {
         for (int i1 : x1) {
             for (int i2 : x2) {
@@ -151,7 +151,7 @@ int getScore(string& seed, vector<Card>& cardList, vector<int>& perm)
     return r;
 }
 
-int getPossibleScore(vector<Card>& cardList, vector<int>& lines)
+int getPossibleScore(vector<int>& lines)
 {
     int r = 0;
     for (int i = 0; i < 5; i++) {
@@ -183,7 +183,7 @@ vector<int> findPieces(vector<Card>& cardList, int x)
     }
     sort(pairVec.begin(), pairVec.end());
     vector<int> r;
-    for (auto it : pairVec) {
+    for (pair<int, int>& it : pairVec) {
         r.push_back(it.second);
     }
     return r;
@@ -231,9 +231,19 @@ void placeRest(vector<Card>& cardList, vector<int>& perm)
     }
 }
 
+bool isTrying(vector<int>& lines)
+{
+    for (int i = 5; i < 15; i++) {
+        if (lines[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int realGetPerm(string& seed, vector<Card>& cardList, vector<int>& lines)
 {
-    if (getPossibleScore(cardList, lines) < maxRecorder.getMax()) {
+    if (!isTrying(lines) && getPossibleScore(lines) < maxRecorder.getMax()) {
         return 0;
     }
 
@@ -249,14 +259,13 @@ int realGetPerm(string& seed, vector<Card>& cardList, vector<int>& lines)
                 key = key * 10 + lines[j * 5 + index[i][j]];
             }
         }
-        if (mp.find(key) == mp.end()) {
+        if (!mp.count(key)) {
             mp[key] = vector<int>();
         }
         mp[key].push_back(i);
     }
 
-    vector<int> perm;
-    perm.resize(20, -1);
+    vector<int> perm(20, -1);
     auto t = mp.end();
     do {
         t--;
@@ -272,98 +281,153 @@ int realGetPerm(string& seed, vector<Card>& cardList, vector<int>& lines)
 
 bool getPerm(string& seed, vector<Card>& cardList, vector<int> lines, int dep)
 {
-    if (lines.empty()) {
-        return false;
-    }
-    if (dep > zeroCount) {
-        return true;
-    }
-    int b = realGetPerm(seed, cardList, lines);
-    if (b == 2) {
-        for (int i = 0; i < lines.size() && lines[i]; i++) {
-            vector<int> cp = lines;
-            cp[i] = 0;
-            getPerm(seed, cardList, cp, dep + 1);
-        }
-    }
-    return true;
+    // if (lines.empty()) {
+    //     return false;
+    // }
+    // if (dep > zeroCount) {
+    //     return true;
+    // }
+    // int b = realGetPerm(seed, cardList, lines);
+    // if (b == 2) {
+    //     for (int i = 0; i < lines.size() && lines[i]; i++) {
+    //         vector<int> cp = lines;
+    //         cp[i] = 0;
+    //         getPerm(seed, cardList, cp, dep + 1);
+    //     }
+    // }
+    // return true;
+    return realGetPerm(seed, cardList, lines) == 1;
 }
 
 class LinesVec {
 public:
+    LinesVec(int x) : mZeroCnt(x) {}
     vector<int> getNext()
     {
-        lock_guard<mutex> _tmp(idMutex);
-        if (mId < vec.size()) return vec[mId++];
-        return {};
+        static const int x[] = {8, 4, 3, 0};
+        vector<int> ret;
+        int cnt;
+        do {
+            ret.clear();
+            cnt = 0;
+            int id = getId();
+            for (int i = 0; i < 5; i++) {
+                ret.push_back(x[id % 4]);
+                id /= 4;
+                if (x[id % 4] == 0) cnt++;
+            }
+            if (id) return {};
+        } while (cnt > zeroCount);
+        return ret;
     }
-    void set(set<vector<int> >& lineSet) { vec = vector<vector<int> >(lineSet.begin(), lineSet.end()); }
 
 private:
-    mutex idMutex;
-    int mId = 0;
-    vector<vector<int> > vec;
+    mutex mMutex;
+    int mZeroCnt, mId = 0;
+    int getId()
+    {
+        lock_guard<mutex> _tmp(mMutex);
+        return mId++;
+    }
 };
+
+mutex pMtx;
+void print(vector<int> v, string str)
+{
+    unique_lock<mutex> _tmp(pMtx);
+    for (int i = 0; i < 5; i++) {
+        cout << v[i] << ' ';
+    }
+    cout << str << endl;
+}
 
 void runThread(string& seed, vector<Card>& cardList, LinesVec& linesVec)
 {
-    while (getPerm(seed, cardList, linesVec.getNext(), 0))
-        ;
+    static const int nums[][4] = {{9, 5, 1, 0}, {7, 6, 2, 0}};
+    vector<int> lineFirst;
+    while (1) {
+        lineFirst = linesVec.getNext();
+        if (lineFirst.empty()) break;
+
+        vector<int> cp = lineFirst;
+        for (int i = 0; i < 10; i++) cp.push_back(0);
+        if (!getPerm(seed, cardList, cp, 0)) {
+            // print(cp, "fail!");
+            continue;
+        }
+
+        for (int k = 0;; k++) {
+            cp = lineFirst;
+            int l = k;
+            for (int i = 0; i < 10; i++) {
+                cp.push_back(nums[i / 5][l % 4]);
+                l /= 4;
+            }
+            if (l) break;
+            int cnt = 0;
+            for (int& i : cp) {
+                if (i == 0) {
+                    cnt++;
+                }
+            }
+            if (cnt > zeroCount) continue;
+            getPerm(seed, cardList, cp, 0);
+        }
+
+        // print(cp, "finish!");
+        continue;
+    }
 }
 
-void insertSetByLine(set<vector<int> >& linesSet, vector<Card>& cardList, vector<int>& choice, vector<int>& line,
-                     int dep)
-{
-    static const int nums[3][3] = {{8, 4, 3}, {9, 5, 1}, {7, 6, 2}};
-    static const int index[5][3] = {{3, 0, 0}, {4, 1, 3}, {0, 2, 1}, {1, 3, 4}, {2, 4, 2}};
-    if (dep >= 15) {
-        if (linesSet.find(reverseVec(line)) == linesSet.end()) {
-            linesSet.insert(line);
-        }
-        return;
-    }
-    int i = dep / 3, j = dep % 3;
-    int num = cardList[choice[i]].getNum(j);
-    if (num != -1) {
-        line[j * 5 + index[i][j]] = num;
-        insertSetByLine(linesSet, cardList, choice, line, dep + 1);
-    } else {
-        for (int l = 0; l < 3; l++) {
-            line[j * 5 + index[i][j]] = nums[j][l];
-            insertSetByLine(linesSet, cardList, choice, line, dep + 1);
-        }
-    }
-}
+// void insertSetByLine(set<vector<int> >& linesSet, vector<Card>& cardList, vector<int>& choice, vector<int>& line,
+//                      int dep)
+// {
+//     static const int nums[3][3] = {{8, 4, 3}, {9, 5, 1}, {7, 6, 2}};
+//     static const int index[5][3] = {{3, 0, 0}, {4, 1, 3}, {0, 2, 1}, {1, 3, 4}, {2, 4, 2}};
+//     if (dep >= 15) {
+//         if (linesSet.find(reverseVec(line)) == linesSet.end()) {
+//             linesSet.insert(line);
+//         }
+//         return;
+//     }
+//     int i = dep / 3, j = dep % 3;
+//     int num = cardList[choice[i]].getNum(j);
+//     if (num != -1) {
+//         line[j * 5 + index[i][j]] = num;
+//         insertSetByLine(linesSet, cardList, choice, line, dep + 1);
+//     } else {
+//         for (int l = 0; l < 3; l++) {
+//             line[j * 5 + index[i][j]] = nums[j][l];
+//             insertSetByLine(linesSet, cardList, choice, line, dep + 1);
+//         }
+//     }
+// }
 
-void insertSet(set<vector<int> >& linesSet, vector<Card>& cardList, vector<int>& choice, int vis[20], int dep)
-{
-    if (dep >= 5) {
-        vector<int> line(15, -1);
-        insertSetByLine(linesSet, cardList, choice, line, 0);
-        return;
-    }
-    for (int i = 0; i < 20; i++) {
-        if (!vis[i]) {
-            vis[i] = 1;
-            choice.push_back(i);
-            insertSet(linesSet, cardList, choice, vis, dep + 1);
-            choice.pop_back();
-            vis[i] = 0;
-        }
-    }
-}
+// void insertSet(set<vector<int> >& linesSet, vector<Card>& cardList, vector<int>& choice, int vis[20], int dep)
+// {
+//     if (dep >= 5) {
+//         // cout << endl;
+//         // for (auto i : choice) cout << i << ' ';
+//         // cout << endl;
+//         vector<int> line(15, -1);
+//         insertSetByLine(linesSet, cardList, choice, line, 0);
+//         return;
+//     }
+//     for (int i = 0; i < 20; i++) {
+//         if (!vis[i]) {
+//             vis[i] = 1;
+//             choice.push_back(i);
+//             insertSet(linesSet, cardList, choice, vis, dep + 1);
+//             choice.pop_back();
+//             vis[i] = 0;
+//         }
+//     }
+// }
 
 void getMaxScore(string& seed, vector<Card>& cardList)
 {
     auto t0 = chrono::system_clock::now();
-    int vis[20] = {0};
-    vector<int> choice;
-    set<vector<int> > linesSet;
-    insertSet(linesSet, cardList, choice, vis, 0);
-    cout << linesSet.size() << endl;
-    auto t1 = chrono::system_clock::now();
-    LinesVec linesVec;
-    linesVec.set(linesSet);
+    LinesVec linesVec(zeroCount);
     vector<thread> threads;
     threads.resize(calThread);
     for (int i = 0; i < calThread; i++) {
@@ -372,11 +436,10 @@ void getMaxScore(string& seed, vector<Card>& cardList)
     for (int i = 0; i < calThread; i++) {
         threads[i].join();
     }
-    auto t2 = chrono::system_clock::now();
+    auto t1 = chrono::system_clock::now();
     if (printTime) {
-        double duration1 = (t1 - t0).count() / (1e9);
-        double duration2 = (t2 - t1).count() / (1e9);
-        printf("t1 %lf seconds, t2 %lf seconds\n", duration1, duration2);
+        double duration = (t1 - t0).count() / (1e9);
+        printf("duration %lf seconds\n", duration);
     }
 }
 
@@ -419,7 +482,7 @@ void randomFind()
         }
         if (maxRecorder.smallerThan(tot)) {
             getMaxScore(seed, cardList);
-            cout << "try seed: " << seed << "tot: " << tot << endl;
+            cout << "try seed: " << seed << " tot: " << tot << endl;
         }
     }
 }
@@ -443,10 +506,11 @@ void numberFind()
         int tot = sum(cardList);
         if (maxRecorder.smallerThan(tot)) {
             getMaxScore(seed, cardList);
-            cout << "try seed: " << seed << "tot: " << tot << endl;
-        } else if (num % printNum == 0) {
-            cout << "try seed: " << seed << endl;
+            cout << "try seed: " << seed << " tot: " << tot << endl;
         }
+        // else if (num % printNum == 0) {
+        //     cout << "try seed: " << seed << endl;
+        // }
         // maxRecorder.print();
     }
 }
