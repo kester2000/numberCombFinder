@@ -18,6 +18,7 @@
 //#include "createProccess.h"
 
 using namespace std;
+typedef long long ll;
 
 // string seed;
 int calThread = 12;
@@ -326,7 +327,7 @@ private:
     int mZeroCnt, mId = 0;
     int getId()
     {
-        lock_guard<mutex> _tmp(mMutex);
+        unique_lock<mutex> _tmp(mMutex);
         return mId++;
     }
 };
@@ -476,24 +477,19 @@ void randomFind()
         string seed = to_string(rand());
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
-        int wildCnt = wild(cardList);
-        if (wildCnt == 2) {
-            tot -= 6;
-        }
         if (maxRecorder.smallerThan(tot)) {
-            getMaxScore(seed, cardList);
             cout << "try seed: " << seed << " tot: " << tot << endl;
+            getMaxScore(seed, cardList);
         }
     }
 }
 
 int printNum;
-typedef long long ll;
 mutex startNumMutex;
 ll startNum = 0;
 ll getNextNum()
 {
-    lock_guard<mutex> _tmp(startNumMutex);
+    unique_lock<mutex> _tmp(startNumMutex);
     return startNum++;
 }
 
@@ -505,8 +501,8 @@ void numberFind()
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
         if (maxRecorder.smallerThan(tot)) {
-            getMaxScore(seed, cardList);
             cout << "try seed: " << seed << " tot: " << tot << endl;
+            getMaxScore(seed, cardList);
         }
         // else if (num % printNum == 0) {
         //     cout << "try seed: " << seed << endl;
@@ -613,6 +609,8 @@ int main(int argc, char** argv)
         for (Card card : cardList) {
             cout << card.getNum(0) << ' ' << card.getNum(1) << ' ' << card.getNum(2) << endl;
         }
+        int tot = sum(cardList);
+        cout << "try seed: " << seed << " tot: " << tot << endl;
         getMaxScore(seed, cardList);
     } else {
         if (!calThread) {
