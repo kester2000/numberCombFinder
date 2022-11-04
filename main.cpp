@@ -501,6 +501,9 @@ void numberFind()
         vector<Card> cardList = getCardsBySeed(seed);
         int tot = sum(cardList);
         if (maxRecorder.smallerThan(tot)) {
+            time_t now_time = time(NULL);
+            tm* t_tm = localtime(&now_time);
+            cout << asctime(t_tm);
             cout << "try seed: " << seed << " tot: " << tot << endl;
             getMaxScore(seed, cardList);
         }
